@@ -29,14 +29,15 @@ data "aws_key_pair" "pchoon" {
 }
 
 resource "aws_instance" "bastion" {
-  ami             = data.aws_ami.al2023.id
-  instance_type   = "t3.micro"
-  subnet_id       = local.private_subnet_ids[0]
-  security_groups = [aws_security_group.default_sg.id]
-  key_name = data.aws_key_pair.pchoon.key_name
+  ami                  = data.aws_ami.al2023.id
+  instance_type        = "t3.micro"
+  subnet_id            = local.private_subnet_ids[0]
+  security_groups      = [aws_security_group.default_sg.id]
+  key_name             = data.aws_key_pair.pchoon.key_name
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
   root_block_device {
-     volume_size = 30
-  volume_type = "gp3" 
+    volume_size = 30
+    volume_type = "gp3"
   }
   user_data = <<-EOF
 #!/bin/bash
@@ -89,4 +90,33 @@ resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
   security_group_id = aws_security_group.default_sg.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1" # semantically equivalent to all ports
+}
+
+resource "aws_iam_role" "ec2_role" {
+  name = "${var.name}_ec2_role"
+
+  assume_role_policy = jsonencode({
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+    Version = "2012-10-17"
+  })
+  tags = {
+    Name  = "${var.name}_ec2_role"
+    Owner = var.tag
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_role_AdministratorAccess" {
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+  role       = aws_iam_role.ec2_role.name
+}
+
+resource "aws_iam_instance_profile" "ec2_profile" {
+  name = "${var.name}_ec2_profile"
+  role = aws_iam_role.ec2_role.name
 }
